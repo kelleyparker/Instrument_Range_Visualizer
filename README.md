@@ -36,4 +36,4 @@ Transposing instruments show:
 
 ## Usage
 
-Open `instrument-ranges.html` directly in any modern browser, or visit the live GitHub Pages site linked above.
+Open `index.html` directly in any modern browser, or visit the live GitHub Pages site linked above.
