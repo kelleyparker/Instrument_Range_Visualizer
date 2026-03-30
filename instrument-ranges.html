@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Instrument Range Visualizer</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --woodwind:       #16A085;
+  --woodwind-dim:   rgba(22,160,133,0.22);
+  --brass:          #D4821A;
+  --brass-dim:      rgba(212,130,26,0.22);
+  --string:         #C0392B;
+  --string-dim:     rgba(192,57,43,0.22);
+  --keyboard:       #7D3C98;
+  --keyboard-dim:   rgba(125,60,152,0.22);
+
+  --bg:       #F2F4F7;
+  --surface:  #FFFFFF;
+  --border:   #DDE1E7;
+  --gridline: #E8EBF0;
+  --gridoct:  #CDD2DA;
+  --text:     #1A202C;
+  --muted:    #718096;
+  --name-w:   170px;
+  --row-h:    34px;
+  --font:     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* ── HEADER ─────────────────────────────────────────── */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px 12px;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+}
+
+.header-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+h1 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+h1 em {
+  font-style: normal;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+  margin-left: 8px;
+}
+
+.controls {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ctrl-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ctrl-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+
+.btn-group {
+  display: flex;
+  border: 1.5px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.btn {
+  padding: 5px 13px;
+  font-size: 0.78rem;
+  font-family: var(--font);
+  cursor: pointer;
+  border: none;
+  background: var(--surface);
+  color: var(--muted);
+  border-right: 1.5px solid var(--border);
+  transition: background 0.12s, color 0.12s;
+  line-height: 1;
+}
+.btn:last-child { border-right: none; }
+.btn:hover:not(.active) { background: #F0F2F5; color: var(--text); }
+.btn.active { background: var(--text); color: #FFF; }
+
+/* ── LEGEND ──────────────────────────────────────────── */
+.legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.leg {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  color: var(--muted);
+  cursor: default;
+}
+
+.leg-swatch {
+  width: 22px;
+  height: 10px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.leg.woodwind .leg-swatch { background: var(--woodwind); }
+.leg.brass    .leg-swatch { background: var(--brass); }
+.leg.string   .leg-swatch { background: var(--string); }
+.leg.keyboard .leg-swatch { background: var(--keyboard); }
+
+.leg-swatch.secondary {
+  background: transparent;
+  border: 1.5px dashed #999;
+  height: 8px;
+}
+
+/* ── MAIN ────────────────────────────────────────────── */
+.main {
+  padding: 20px 24px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.chart-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+
+/* ── AXIS ROW ────────────────────────────────────────── */
+.axis-row {
+  display: flex;
+  align-items: stretch;
+  background: #F8F9FB;
+  border-bottom: 2px solid var(--gridoct);
+  min-height: 36px;
+}
+.axis-row.bottom {
+  border-bottom: none;
+  border-top: 2px solid var(--gridoct);
+}
+
+.name-col {
+  width: var(--name-w);
+  min-width: var(--name-w);
+  flex-shrink: 0;
+  padding: 0 14px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+}
+
+.axis-area {
+  flex: 1;
+  position: relative;
+  min-height: 36px;
+}
+
+.axis-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.axis-mark .lbl {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+  line-height: 1;
+}
+.axis-mark .tick {
+  width: 1px;
+  height: 5px;
+  background: var(--gridoct);
+  margin-top: 3px;
+}
+.axis-row.bottom .axis-mark { flex-direction: column-reverse; }
+.axis-row.bottom .axis-mark .tick { margin-top: 0; margin-bottom: 3px; }
+
+/* ── FAMILY HEADER ───────────────────────────────────── */
+.fam-header {
+  display: flex;
+  align-items: stretch;
+  min-height: 26px;
+  background: #F5F7FA;
+  border-bottom: 1px solid var(--border);
+}
+
+.fam-label {
+  width: var(--name-w);
+  min-width: var(--name-w);
+  flex-shrink: 0;
+  padding: 0 14px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+}
+.fam-label.woodwind { color: var(--woodwind); }
+.fam-label.brass    { color: var(--brass); }
+.fam-label.string   { color: var(--string); }
+.fam-label.keyboard { color: var(--keyboard); }
+
+.fam-strip { flex: 1; position: relative; min-height: 26px; }
+
+/* ── INSTRUMENT ROW ──────────────────────────────────── */
+.inst-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #F0F2F5;
+  transition: background 0.1s;
+  cursor: default;
+}
+.inst-row:hover { background: #F8FCFD; }
+.inst-row:last-child { border-bottom: none; }
+
+.inst-name {
+  width: var(--name-w);
+  min-width: var(--name-w);
+  flex-shrink: 0;
+  padding: 0 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text);
+  border-right: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  height: var(--row-h);
+  white-space: nowrap;
+}
+
+.inst-chart {
+  flex: 1;
+  position: relative;
+  height: var(--row-h);
+}
+
+/* ── GRID LINES ──────────────────────────────────────── */
+.grid-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.gl {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--gridline);
+}
+.gl.oct { background: var(--gridoct); }
+
+/* ── RANGE BARS ──────────────────────────────────────── */
+.rbar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.rbar.primary {
+  height: 15px;
+  z-index: 3;
+  border-radius: 7.5px;
+}
+
+.rbar.secondary {
+  height: 8px;
+  z-index: 2;
+  background: transparent !important;
+  border: 1.5px dashed;
+  border-radius: 4px;
+  opacity: 0.55;
+}
+
+.woodwind .rbar.primary  { background: var(--woodwind); box-shadow: 0 1px 3px rgba(22,160,133,0.3); }
+.brass    .rbar.primary  { background: var(--brass);    box-shadow: 0 1px 3px rgba(212,130,26,0.3); }
+.string   .rbar.primary  { background: var(--string);   box-shadow: 0 1px 3px rgba(192,57,43,0.3); }
+.keyboard .rbar.primary  { background: var(--keyboard); box-shadow: 0 1px 3px rgba(125,60,152,0.3); }
+
+.woodwind .rbar.secondary { border-color: var(--woodwind); }
+.brass    .rbar.secondary { border-color: var(--brass); }
+.string   .rbar.secondary { border-color: var(--string); }
+.keyboard .rbar.secondary { border-color: var(--keyboard); }
+
+/* ── TOOLTIP ─────────────────────────────────────────── */
+.tooltip {
+  position: fixed;
+  background: rgba(26,32,44,0.96);
+  color: #EEF0F4;
+  padding: 9px 13px;
+  border-radius: 9px;
+  font-size: 0.78rem;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 9999;
+  max-width: 230px;
+  line-height: 1.6;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  transition: opacity 0.12s;
+}
+.tooltip.show { opacity: 1; }
+
+.tt-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  margin-bottom: 5px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+}
+.tt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+.tt-lbl { color: #A0AEC0; font-size: 0.73rem; }
+.tt-val { font-weight: 600; font-family: 'Courier New', monospace; font-size: 0.78rem; }
+.tt-note {
+  font-size: 0.7rem;
+  color: #718096;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* ── FADE TRANSITION ─────────────────────────────────── */
+#chart-body {
+  transition: opacity 0.15s;
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────── */
+@media (max-width: 640px) {
+  :root {
+    --name-w:  100px;
+    --row-h:   28px;
+  }
+  .main { padding: 12px 10px; }
+  .header { padding: 10px 14px 10px; }
+  h1 { font-size: 1rem; }
+  h1 em { display: none; }
+  .btn { padding: 4px 9px; font-size: 0.73rem; }
+  .inst-name { font-size: 0.74rem; padding: 0 8px; }
+  .fam-label { padding: 0 8px; }
+  .name-col  { padding: 0 8px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════ HEADER ══════════ -->
+<div class="header">
+  <div class="header-row1">
+    <h1>Instrument Range Visualizer <em>Written &amp; sounding ranges · standard professional</em></h1>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+    <div class="controls">
+      <div class="ctrl-group">
+        <span class="ctrl-label">View</span>
+        <div class="btn-group">
+          <button class="btn active" data-view="concert">Concert Pitch</button>
+          <button class="btn" data-view="written">Written Pitch</button>
+        </div>
+      </div>
+      <div class="ctrl-group">
+        <span class="ctrl-label">Sort</span>
+        <div class="btn-group">
+          <button class="btn active" data-sort="family">By Family</button>
+          <button class="btn" data-sort="lowest">Lowest Note</button>
+          <button class="btn" data-sort="highest">Highest Note</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="leg woodwind"><div class="leg-swatch"></div>Woodwind</div>
+      <div class="leg brass">   <div class="leg-swatch"></div>Brass</div>
+      <div class="leg string">  <div class="leg-swatch"></div>String</div>
+      <div class="leg keyboard"><div class="leg-swatch"></div>Keyboard</div>
+      <div class="leg"><div class="leg-swatch secondary"></div>Alt. range (transposing)</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ CHART ═══════════ -->
+<div class="main">
+  <div class="chart-wrap">
+    <div id="axis-top"    class="axis-row"></div>
+    <div id="chart-body"></div>
+    <div id="axis-bottom" class="axis-row bottom"></div>
+  </div>
+</div>
+
+<div id="tooltip" class="tooltip"></div>
+
+<!-- ═══════════════════════════════════ SCRIPT ══════════ -->
+<script>
+'use strict';
+
+/* ─── NOTE UTILITIES ─────────────────────────────────── */
+const PC = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+const NAMES_SHARP = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+const NAMES_FLAT  = ['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+const TOTAL = 96; // C0 = 0 semitones, C8 = 96 semitones
+
+/** "Bb3" → semitone integer (C0 = 0) */
+function n2s(note) {
+  const m = note.match(/^([A-G])([#b]?)(-?\d+)$/);
+  if (!m) return 0;
+  const acc = m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0;
+  return parseInt(m[3], 10) * 12 + PC[m[1]] + acc;
+}
+
+/** semitone → readable note label, preferring flats */
+function s2n(semi) {
+  const oct = Math.floor(semi / 12);
+  const pc  = ((semi % 12) + 12) % 12;
+  return NAMES_FLAT[pc] + oct;
+}
+
+/** semitone → percentage string for CSS `left` / `width` */
+function pct(semi) {
+  return (Math.max(0, Math.min(TOTAL, semi)) / TOTAL * 100).toFixed(5) + '%';
+}
+
+/* ─── INSTRUMENT DATA ────────────────────────────────── */
+/*
+  wL / wH  = written  lowest / highest note
+  sL / sH  = sounding lowest / highest note (concert pitch)
+  For non-transposing instruments: wL===sL, wH===sH
+*/
+const INSTRUMENTS = [
+  // WOODWINDS ──────────────────────────────────────────────
+  { name:'Piccolo',        family:'woodwind', wL:'D4',  wH:'C7',  sL:'D5',  sH:'C8'  },
+  { name:'Flute',          family:'woodwind', wL:'C4',  wH:'D7',  sL:'C4',  sH:'D7'  },
+  { name:'Oboe',           family:'woodwind', wL:'Bb3', wH:'G6',  sL:'Bb3', sH:'G6'  },
+  { name:'English Horn',   family:'woodwind', wL:'E3',  wH:'A5',  sL:'A2',  sH:'D5'  },
+  { name:'Clarinet (B♭)',  family:'woodwind', wL:'E3',  wH:'C7',  sL:'D3',  sH:'Bb6' },
+  { name:'Bass Clarinet',  family:'woodwind', wL:'E3',  wH:'Eb6', sL:'D2',  sH:'Db5' },
+  { name:'Alto Sax',       family:'woodwind', wL:'Bb2', wH:'F#5', sL:'Db2', sH:'A4'  },
+  { name:'Tenor Sax',      family:'woodwind', wL:'Bb2', wH:'F#5', sL:'Ab1', sH:'E4'  },
+  { name:'Bari Sax',       family:'woodwind', wL:'Bb2', wH:'F#5', sL:'Db1', sH:'A3'  },
+  { name:'Bassoon',        family:'woodwind', wL:'Bb1', wH:'Eb5', sL:'Bb1', sH:'Eb5' },
+  { name:'Contrabassoon',  family:'woodwind', wL:'Bb1', wH:'Bb4', sL:'Bb0', sH:'Bb3' },
+  // BRASS ──────────────────────────────────────────────────
+  { name:'Trumpet (B♭)',   family:'brass',    wL:'E3',  wH:'Bb5', sL:'D3',  sH:'Ab5' },
+  { name:'French Horn',    family:'brass',    wL:'C2',  wH:'F5',  sL:'F1',  sH:'Bb4' },
+  { name:'Trombone',       family:'brass',    wL:'E2',  wH:'Bb4', sL:'E2',  sH:'Bb4' },
+  { name:'Bass Trombone',  family:'brass',    wL:'Bb1', wH:'Bb4', sL:'Bb1', sH:'Bb4' },
+  { name:'Euphonium',      family:'brass',    wL:'Bb1', wH:'Bb4', sL:'Bb1', sH:'Bb4' },
+  { name:'Tuba',           family:'brass',    wL:'D1',  wH:'F4',  sL:'D1',  sH:'F4'  },
+  // STRINGS ────────────────────────────────────────────────
+  { name:'Violin',         family:'string',   wL:'G3',  wH:'A7',  sL:'G3',  sH:'A7'  },
+  { name:'Viola',          family:'string',   wL:'C3',  wH:'E6',  sL:'C3',  sH:'E6'  },
+  { name:'Cello',          family:'string',   wL:'C2',  wH:'C6',  sL:'C2',  sH:'C6'  },
+  { name:'Double Bass',    family:'string',   wL:'E2',  wH:'C5',  sL:'E1',  sH:'C4'  },
+  // KEYBOARD / HARP ────────────────────────────────────────
+  { name:'Piano',          family:'keyboard', wL:'A0',  wH:'C8',  sL:'A0',  sH:'C8'  },
+  { name:'Harp',           family:'keyboard', wL:'Cb1', wH:'G#7', sL:'Cb1', sH:'G#7' },
+];
+
+// Pre-compute semitone values and transposition flag
+INSTRUMENTS.forEach(i => {
+  i.wLs = n2s(i.wL);  i.wHs = n2s(i.wH);
+  i.sLs = n2s(i.sL);  i.sHs = n2s(i.sH);
+  i.isTransposing = (i.wLs !== i.sLs || i.wHs !== i.sHs);
+});
+
+/* ─── OCTAVE MARKERS ─────────────────────────────────── */
+// C0 through C8: every 12 semitones
+const OCTAVE_SEMIS  = [0,12,24,36,48,60,72,84,96];
+const OCTAVE_LABELS = ['C0','C1','C2','C3','C4','C5','C6','C7','C8'];
+
+/* ─── STATE ──────────────────────────────────────────── */
+let currentView = 'concert'; // 'concert' | 'written'
+let currentSort = 'family';  // 'family' | 'lowest' | 'highest'
+
+/* ─── BUILD AXIS ─────────────────────────────────────── */
+function buildAxis(id) {
+  const el = document.getElementById(id);
+  el.innerHTML = '';
+
+  const nc = document.createElement('div');
+  nc.className = 'name-col';
+  nc.textContent = 'Instrument';
+  el.appendChild(nc);
+
+  const area = document.createElement('div');
+  area.className = 'axis-area';
+
+  OCTAVE_SEMIS.forEach((semi, i) => {
+    const mark = document.createElement('div');
+    mark.className = 'axis-mark';
+    mark.style.left = pct(semi);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'lbl';
+    lbl.textContent = OCTAVE_LABELS[i];
+
+    const tick = document.createElement('div');
+    tick.className = 'tick';
+
+    mark.appendChild(lbl);
+    mark.appendChild(tick);
+    area.appendChild(mark);
+  });
+
+  el.appendChild(area);
+}
+
+/* ─── BUILD GRID LAYER ───────────────────────────────── */
+function buildGrid(parent) {
+  const layer = document.createElement('div');
+  layer.className = 'grid-layer';
+  // Half-octave lines (every 6 semitones)
+  for (let s = 0; s <= TOTAL; s += 6) {
+    const line = document.createElement('div');
+    line.className = s % 12 === 0 ? 'gl oct' : 'gl';
+    line.style.left = pct(s);
+    layer.appendChild(line);
+  }
+  parent.appendChild(layer);
+}
+
+/* ─── SORT LOGIC ─────────────────────────────────────── */
+const FAM_ORDER = { woodwind:0, brass:1, string:2, keyboard:3 };
+
+function getSorted() {
+  const arr = [...INSTRUMENTS];
+  if (currentSort === 'family') {
+    arr.sort((a, b) => {
+      const fd = FAM_ORDER[a.family] - FAM_ORDER[b.family];
+      if (fd !== 0) return fd;
+      // within family: by sounding low ascending
+      return a.sLs - b.sLs;
+    });
+  } else if (currentSort === 'lowest') {
+    arr.sort((a, b) => {
+      const aL = currentView === 'concert' ? a.sLs : a.wLs;
+      const bL = currentView === 'concert' ? b.sLs : b.wLs;
+      return aL - bL;
+    });
+  } else { // 'highest'
+    arr.sort((a, b) => {
+      const aH = currentView === 'concert' ? a.sHs : a.wHs;
+      const bH = currentView === 'concert' ? b.sHs : b.wHs;
+      return bH - aH;
+    });
+  }
+  return arr;
+}
+
+/* ─── BAR POSITION ───────────────────────────────────── */
+function barPos(inst, type) {
+  // type: 'sounding' | 'written'
+  const lo = type === 'sounding' ? inst.sLs : inst.wLs;
+  const hi = type === 'sounding' ? inst.sHs : inst.wHs;
+  const left  = lo  / TOTAL * 100;
+  const right = hi  / TOTAL * 100;
+  return { left: left.toFixed(4) + '%', width: (right - left).toFixed(4) + '%' };
+}
+
+/* ─── BUILD INSTRUMENT ROW ───────────────────────────── */
+function buildRow(inst) {
+  const row = document.createElement('div');
+  row.className = `inst-row ${inst.family}`;
+
+  // Name cell
+  const nameCell = document.createElement('div');
+  nameCell.className = 'inst-name';
+  nameCell.textContent = inst.name;
+  row.appendChild(nameCell);
+
+  // Chart cell
+  const chart = document.createElement('div');
+  chart.className = 'inst-chart';
+  buildGrid(chart);
+
+  const primaryType   = currentView === 'concert' ? 'sounding' : 'written';
+  const secondaryType = currentView === 'concert' ? 'written'  : 'sounding';
+
+  // Secondary bar (dashed, behind) – only for transposing instruments
+  if (inst.isTransposing) {
+    const sec = document.createElement('div');
+    sec.className = 'rbar secondary';
+    const sp = barPos(inst, secondaryType);
+    sec.style.left  = sp.left;
+    sec.style.width = sp.width;
+    chart.appendChild(sec);
+  }
+
+  // Primary bar (solid, in front)
+  const pri = document.createElement('div');
+  pri.className = 'rbar primary';
+  const pp = barPos(inst, primaryType);
+  pri.style.left  = pp.left;
+  pri.style.width = pp.width;
+  chart.appendChild(pri);
+
+  row.appendChild(chart);
+
+  // Tooltip events
+  row.addEventListener('mousemove', e => showTooltip(e, inst));
+  row.addEventListener('mouseleave', hideTooltip);
+
+  return row;
+}
+
+/* ─── FAMILY NAMES MAP ───────────────────────────────── */
+const FAM_NAMES = {
+  woodwind: 'Woodwinds',
+  brass:    'Brass',
+  string:   'Strings',
+  keyboard: 'Keyboard & Harp'
+};
+
+/* ─── BUILD CHART BODY ───────────────────────────────── */
+function buildChartBody() {
+  const body   = document.getElementById('chart-body');
+  body.style.opacity = '0';
+
+  setTimeout(() => {
+    body.innerHTML = '';
+    const sorted = getSorted();
+
+    if (currentSort === 'family') {
+      // Grouped by family with headers
+      ['woodwind','brass','string','keyboard'].forEach(fam => {
+        const famInst = sorted.filter(i => i.family === fam);
+        if (!famInst.length) return;
+
+        // Family header
+        const hdr = document.createElement('div');
+        hdr.className = 'fam-header';
+
+        const lbl = document.createElement('div');
+        lbl.className = `fam-label ${fam}`;
+        lbl.textContent = FAM_NAMES[fam];
+        hdr.appendChild(lbl);
+
+        const strip = document.createElement('div');
+        strip.className = 'fam-strip';
+        buildGrid(strip);
+        hdr.appendChild(strip);
+
+        body.appendChild(hdr);
+        famInst.forEach(inst => body.appendChild(buildRow(inst)));
+      });
+    } else {
+      // Flat sorted list
+      sorted.forEach(inst => body.appendChild(buildRow(inst)));
+    }
+
+    body.style.opacity = '1';
+  }, 140);
+}
+
+/* ─── TOOLTIP ────────────────────────────────────────── */
+const ttEl = document.getElementById('tooltip');
+
+function showTooltip(e, inst) {
+  const sr = `${inst.sL}–${inst.sH}`;
+  const wr = `${inst.wL}–${inst.wH}`;
+  const inConcert = currentView === 'concert';
+
+  let html = `<div class="tt-name">${inst.name}</div>`;
+
+  if (inConcert) {
+    html += `<div class="tt-row"><span class="tt-lbl">Sounding</span><span class="tt-val">${sr}</span></div>`;
+    if (inst.isTransposing)
+      html += `<div class="tt-row"><span class="tt-lbl">Written</span><span class="tt-val">${wr}</span></div>`;
+  } else {
+    html += `<div class="tt-row"><span class="tt-lbl">Written</span><span class="tt-val">${wr}</span></div>`;
+    if (inst.isTransposing)
+      html += `<div class="tt-row"><span class="tt-lbl">Sounding</span><span class="tt-val">${sr}</span></div>`;
+  }
+
+  if (inst.isTransposing) {
+    const diff = inst.sLs - inst.wLs;
+    const dir  = diff > 0 ? `sounds ${diff} semitones higher` : `sounds ${Math.abs(diff)} semitones lower`;
+    html += `<div class="tt-note">Transposing: ${dir} than written</div>`;
+  }
+
+  ttEl.innerHTML = html;
+  ttEl.classList.add('show');
+  positionTooltip(e);
+}
+
+function hideTooltip() {
+  ttEl.classList.remove('show');
+}
+
+function positionTooltip(e) {
+  // Must be visible to measure
+  const tw = ttEl.offsetWidth  || 200;
+  const th = ttEl.offsetHeight || 80;
+  let x = e.clientX + 16;
+  let y = e.clientY - Math.round(th / 2);
+
+  if (x + tw > window.innerWidth  - 10) x = e.clientX - tw - 16;
+  if (y < 8)                             y = 8;
+  if (y + th > window.innerHeight - 8)  y = window.innerHeight - th - 8;
+
+  ttEl.style.left = x + 'px';
+  ttEl.style.top  = y + 'px';
+}
+
+// Keep tooltip tracking mouse even if event fires on child elements
+document.addEventListener('mousemove', e => {
+  if (ttEl.classList.contains('show')) positionTooltip(e);
+});
+
+/* ─── CONTROLS ───────────────────────────────────────── */
+document.querySelectorAll('[data-view]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (currentView === btn.dataset.view) return;
+    currentView = btn.dataset.view;
+    document.querySelectorAll('[data-view]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    buildChartBody();
+  });
+});
+
+document.querySelectorAll('[data-sort]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (currentSort === btn.dataset.sort) return;
+    currentSort = btn.dataset.sort;
+    document.querySelectorAll('[data-sort]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    buildChartBody();
+  });
+});
+
+/* ─── INIT ───────────────────────────────────────────── */
+buildAxis('axis-top');
+buildAxis('axis-bottom');
+buildChartBody();
+</script>
+</body>
+</html>
